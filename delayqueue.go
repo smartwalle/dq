@@ -21,7 +21,7 @@ import (
 // ARGV[1] - 消费时间
 // ARGV[2] - 单次处理数量
 var S1 = redis.NewScript(`
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1], 'LIMIT', 0, ARGV[2])
 if (#ids > 0) then
 	redis.call('RPUSH', KEYS[2], unpack(ids))
     redis.call('ZREM', KEYS[1], unpack(ids))
@@ -57,14 +57,14 @@ return msg
 
 // S4 延长消费成功超时时间
 // KEYS[1] - 消费中队列
-// KEYS[1] - 消息 id
-// ARGV[1] - 确认消费成功超时时间
+// ARGV[1] - 消息 id
+// ARGV[2] - 确认消费成功超时时间
 var S4 = redis.NewScript(`
-local score = redis.call('ZSCORE', KEYS[1], KEYS[2])
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
 if (not score) then
 	return
 end
-redis.call('ZADD', KEYS[1], ARGV[1], KEYS[2])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
 `)
 
 // S5
@@ -92,7 +92,7 @@ local doRetry = function(ids)
 end
 
 -- 获取[消费中队列]已经消费超时的数据
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1])
 if (#ids > 0) then
 	-- 消费超时数据重试处理
     doRetry(ids)

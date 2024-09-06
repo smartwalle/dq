@@ -24,7 +24,7 @@ func Test_GetBlock(t *testing.T) {
 	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 1), Member: "3"})
 	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 4), Member: "4"})
 
-	raw, err := dq.S4.Run(context.Background(), rClient, []string{"k1", "4"}, 1725616623).Result()
+	raw, err := dq.S4.Run(context.Background(), rClient, []string{"k1"}, "1", 112).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
