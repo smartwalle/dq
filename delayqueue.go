@@ -15,13 +15,26 @@ import (
 // 待重试队列 - list
 // 剩余重试次数结构 - hash
 
+// S0 添加消息
+// KEYS[1] - 待处理队列
+// KEYS[2] - 剩余重试次数结构
+// ARGV[1] - 消息 id
+// ARGV[2] - 消费时间
+// ARGV[3] - 最大重试次数
+var S0 = redis.NewScript(`
+-- 添加到[待处理队列]
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+-- 写入剩余重试次数
+redis.call('HSET', KEYS[2], ARGV[1], ARGV[3])
+`)
+
 // S1 将消息从[待处理队列]转移到[待消费队列]
 // KEYS[1] - 待处理队列
 // KEYS[2] - 待消费队列
 // ARGV[1] - 消费时间
 // ARGV[2] - 单次处理数量
 var S1 = redis.NewScript(`
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1], 'LIMIT', 0, ARGV[2])
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
 if (#ids > 0) then
 	redis.call('RPUSH', KEYS[2], unpack(ids))
     redis.call('ZREM', KEYS[1], unpack(ids))
@@ -92,7 +105,7 @@ local doRetry = function(ids)
 end
 
 -- 获取[消费中队列]已经消费超时的数据
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
 if (#ids > 0) then
 	-- 消费超时数据重试处理
     doRetry(ids)
