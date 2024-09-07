@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func Test_GetBlock(t *testing.T) {
+func Test_Main(t *testing.T) {
 	var opt = &redis.Options{}
 	opt.Addr = "127.0.0.1:6379"
 	opt.Password = ""
@@ -29,4 +29,14 @@ func Test_GetBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(raw)
+}
+
+func Test_QueueKey(t *testing.T) {
+	t.Log(dq.QueueKey("mail"))
+	t.Log(dq.ScheduleKey("mail"))
+	t.Log(dq.PendingKey("mail"))
+	t.Log(dq.ActiveKey("mail"))
+	t.Log(dq.RetryCountKey("mail"))
+	t.Log(dq.TaskKey("mail", "11"))
+	t.Log(dq.TaskKey("mail", "22"))
 }
