@@ -40,10 +40,22 @@ local timestamp = tonumber(time[1])
 redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'tp', ARGV[5], 'pl', ARGV[6], 'dt', timestamp, 'rc', ARGV[7])
 `)
 
+// RemoveScript 删除消息
+// KEYS[1] - 延迟队列
+// KEYS[2] - MessageKeyPrefix
+// ARGV[1] - 消息 id
+var RemoveScript = redis.NewScript(`
+-- 从[延迟队列]删除
+redis.call('ZREM', KEYS[1], ARGV[1])
+-- 删除消息结构
+local key = KEYS[2]..ARGV[1]
+redis.call('DEL', key)
+`)
+
 // ScheduleToPendingScript 将消息从[延迟队列]转移到[待处理队列]
 // KEYS[1] - 延迟队列
 // KEYS[2] - 待处理队列
-// KEYS[3] - TaskKeyPrefix
+// KEYS[3] - MessageKeyPrefix
 // ARGV[1] - 消费时间
 // ARGV[2] - 单次处理数量
 var ScheduleToPendingScript = redis.NewScript(`
@@ -52,10 +64,12 @@ if (#ids > 0) then
     for _, id in ipairs(ids) do
         local k1 = KEYS[3]..id
         local uuid = redis.call('HGET', k1, 'uuid')
-        local k2 = KEYS[3]..uuid
-        redis.call('RPUSH', KEYS[2], uuid)
+		if uuid ~= nil and uuid ~= '' then
+			local k2 = KEYS[3]..uuid
+        	redis.call('RPUSH', KEYS[2], uuid)
+			redis.call('RENAME', k1, k2)
+		end
         redis.call('ZREM', KEYS[1], id)
-        redis.call('RENAME', k1, k2)
     end
 end
 `)
@@ -76,7 +90,7 @@ return uuid
 // ActiveToRetryScript 将[处理中队列]中已经消费超时的消息转移到[待重试队列]
 // KEYS[1] - 处理中队列
 // KEYS[2] - 待重试队列
-// KEYS[3] - TaskKeyPrefix
+// KEYS[3] - MessageKeyPrefix
 // ARGV[1] - 确认处理成功超时时间
 var ActiveToRetryScript = redis.NewScript(`
 local doRetry = function(uuid)
@@ -94,18 +108,64 @@ local doRetry = function(uuid)
         -- 删除[消息结构]
         redis.call('DEL', key)
     end
+	-- 从[处理中队列]中删除消息
+	redis.call('ZREM', KEYS[1], uuid)
 end
 
 -- 获取[处理中队列]中已经消费超时的消息
 local uuids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
 if (#uuids > 0) then
     for _, uuid in ipairs(uuids) do
-        -- 从[处理中队列]中删除已经消费超时的消息
-        redis.call('ZREM', KEYS[1], uuid)
-        -- 是否需要重试处理
+        -- 重试处理逻辑
         doRetry(uuid)
     end
 end
+`)
+
+// AckScript 消费成功
+// KEYS[1] - 处理中队列
+// KEYS[2] - MessageKeyPrefix
+// ARGV[1] - 消息 uuid
+var AckScript = redis.NewScript(`
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if (not score) then
+	return
+end
+
+-- 从[处理中队列]删除
+redis.call('ZREM', KEYS[1], ARGV[1])
+-- 删除消息结构
+local key = KEYS[2]..ARGV[1]
+redis.call('DEL', key)
+`)
+
+// NackScript 消费失败
+// KEYS[1] - 处理中队列
+// KEYS[2] - 待重试队列
+// KEYS[3] - MessageKeyPrefix
+// ARGV[1] - 消息 uuid
+var NackScript = redis.NewScript(`
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if (not score) then
+	return 
+end
+
+local key = KEYS[3]..ARGV[1]
+
+-- 获取剩余重试次数
+local count = redis.call('HGET', key, 'rc')
+if count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0 then
+    -- 剩余重试次数大于 0
+    -- 更新剩余重试次数
+    redis.call('HINCRBY', key, 'rc', -1)
+    -- 添加到[待重试队列]中
+    redis.call('RPUSH', KEYS[2], ARGV[1])
+else
+    -- 删除[消息结构]
+    redis.call('DEL', key)
+end
+-- 从[处理中队列]中删除消息
+redis.call('ZREM', KEYS[1], ARGV[1])
 `)
 
 // RetryToAciveScript 将消息从[待重试队列]转移到[处理中队列]
@@ -158,12 +218,12 @@ func RetryKey(qname string) string {
 	return fmt.Sprintf("%s:retry", QueueKey(qname))
 }
 
-func TaskKeyPrefix(qname string) string {
-	return fmt.Sprintf("%s:task:", QueueKey(qname))
+func MessageKeyPrefix(qname string) string {
+	return fmt.Sprintf("%s:message:", QueueKey(qname))
 }
 
-func TaskKey(qname, id string) string {
-	return fmt.Sprintf("%s%s", TaskKeyPrefix(qname), id)
+func MessageKey(qname, id string) string {
+	return fmt.Sprintf("%s%s", MessageKeyPrefix(qname), id)
 }
 
 func NewDelayQueue(client redis.UniversalClient, name string) *DelayQueue {

@@ -29,38 +29,23 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-//func Test_Main(t *testing.T) {
-//
-//
-//	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: 1, Member: "1"})
-//	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix()), Member: "2"})
-//	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 1), Member: "3"})
-//	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 4), Member: "4"})
-//
-//	raw, err := dq.RetryToAciveScript.Run(context.Background(), rClient, []string{"k1"}, "1", 112).Result()
-//	if err != nil && !errors.Is(err, redis.Nil) {
-//		t.Fatal(err)
-//	}
-//	t.Log(raw)
-//}
-
 func Test_QueueKey(t *testing.T) {
 	t.Log(dq.QueueKey("mail"))
 	t.Log(dq.ScheduleKey("mail"))
 	t.Log(dq.PendingKey("mail"))
 	t.Log(dq.ActiveKey("mail"))
 	t.Log(dq.RetryKey("mail"))
-	t.Log(dq.TaskKey("mail", "11"))
-	t.Log(dq.TaskKey("mail", "22"))
+	t.Log(dq.MessageKey("mail", "11"))
+	t.Log(dq.MessageKey("mail", "22"))
 }
 
-func Test_S0(t *testing.T) {
+func Test_ScheduleScript(t *testing.T) {
 	var queue = "mail"
 	var id = "t1"
 
 	var keys = []string{
 		dq.ScheduleKey(queue),
-		dq.TaskKey(queue, id),
+		dq.MessageKey(queue, id),
 	}
 	var args = []interface{}{
 		id,
@@ -78,13 +63,31 @@ func Test_S0(t *testing.T) {
 	t.Log(raw)
 }
 
-func Test_S1(t *testing.T) {
+func Test_RemoveScript(t *testing.T) {
+	var queue = "mail"
+	var id = "t1"
+
+	var keys = []string{
+		dq.ScheduleKey(queue),
+		dq.MessageKeyPrefix(queue),
+	}
+	var args = []interface{}{
+		id,
+	}
+	raw, err := dq.RemoveScript.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_ScheduleToPendingScript(t *testing.T) {
 	var queue = "mail"
 
 	var keys = []string{
 		dq.ScheduleKey(queue),
 		dq.PendingKey(queue),
-		dq.TaskKeyPrefix(queue),
+		dq.MessageKeyPrefix(queue),
 	}
 	var args = []interface{}{
 		time.Now().Unix(),
@@ -97,7 +100,7 @@ func Test_S1(t *testing.T) {
 	t.Log(raw)
 }
 
-func Test_S2(t *testing.T) {
+func Test_PendingToActiveScript(t *testing.T) {
 	var queue = "mail"
 
 	var keys = []string{
@@ -114,13 +117,13 @@ func Test_S2(t *testing.T) {
 	t.Log(raw)
 }
 
-func Test_S3(t *testing.T) {
+func Test_ActiveToRetryScript(t *testing.T) {
 	var queue = "mail"
 
 	var keys = []string{
 		dq.ActiveKey(queue),
 		dq.RetryKey(queue),
-		dq.TaskKeyPrefix(queue),
+		dq.MessageKeyPrefix(queue),
 	}
 	var args = []interface{}{
 		time.Now().Unix(),
@@ -132,7 +135,42 @@ func Test_S3(t *testing.T) {
 	t.Log(raw)
 }
 
-func Test_S4(t *testing.T) {
+func Test_AckScript(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.ActiveKey(queue),
+		dq.MessageKeyPrefix(queue),
+	}
+	var args = []interface{}{
+		"d7d46645-cac9-4ebb-b816-ba0278672ea2",
+	}
+	raw, err := dq.AckScript.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_NackScript(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.ActiveKey(queue),
+		dq.RetryKey(queue),
+		dq.MessageKeyPrefix(queue),
+	}
+	var args = []interface{}{
+		"d7d46645-cac9-4ebb-b816-ba0278672ea2",
+	}
+	raw, err := dq.NackScript.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_RetryToAciveScript(t *testing.T) {
 	var queue = "mail"
 
 	var keys = []string{
