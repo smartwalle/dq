@@ -13,21 +13,31 @@ import (
 
 // 延迟队列(sorted set) - member: 消息id，score: 消费时间
 // 待处理队列(list) - element: 消息 id
-// 处理中队列(sorted set) - member: 消息id, score: 确认消费成功超时时间
+// 处理中队列(sorted set) - member: 消息id, score: 确认处理成功超时时间
 // 待重试队列(list) - element: 消息id
 // 剩余重试次数结构(hash) - field: 消息id，value: 剩余重试次数
 
 // S0 添加消息
 // KEYS[1] - 延迟队列
-// KEYS[2] - 剩余重试次数结构
+// KEYS[2] - 消息结构
+// KEYS[3] - 剩余重试次数结构
+//
 // ARGV[1] - 消息 id
 // ARGV[2] - 消费时间
-// ARGV[3] - 最大重试次数
+// ARGV[3] - 队列名称
+// ARGV[4] - 消息类型
+// ARGV[5] - 消息内容
+// ARGV[6] - 最大重试次数
 var S0 = redis.NewScript(`
 -- 添加到[延迟队列]
 redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+-- 获取当前时间
+local time = redis.call('TIME')
+local timestamp = tonumber(time[1])
+-- 写入消息结构
+redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'qn', ARGV[3], 'tp', ARGV[4], 'pl', ARGV[5], 'dt', timestamp)
 -- 写入剩余重试次数
-redis.call('HSET', KEYS[2], ARGV[1], ARGV[3])
+redis.call('HSET', KEYS[3], ARGV[1], ARGV[6])
 `)
 
 // S1 将消息从[延迟队列]转移到[待处理队列]
@@ -47,7 +57,7 @@ return ids
 // S2 将消息从[待处理队列]转移到[处理中队列]
 // KEYS[1] - 待处理队列
 // KEYS[2] - 处理中队列
-// ARGV[1] - 确认消费成功超时时间
+// ARGV[1] - 确认处理成功超时时间
 var S2 = redis.NewScript(`
 local id = redis.call('LPOP', KEYS[1])
 if (not id) then
@@ -60,7 +70,7 @@ return msg
 // S3 将消息从[待重试队列]转移到[处理中队列]
 // KEYS[1] - 待重试队列
 // KEYS[2] - 处理中队列
-// ARGV[1] - 确认消费成功超时时间
+// ARGV[1] - 确认处理成功超时时间
 var S3 = redis.NewScript(`
 local id = redis.call('LPOP', KEYS[1])
 if (not id) then
@@ -73,7 +83,7 @@ return msg
 // S4 延长消费成功超时时间
 // KEYS[1] - 处理中队列
 // ARGV[1] - 消息 id
-// ARGV[2] - 确认消费成功超时时间
+// ARGV[2] - 确认处理成功超时时间
 var S4 = redis.NewScript(`
 local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
 if (not score) then
@@ -86,7 +96,7 @@ redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
 // KEYS[1] - 处理中队列
 // KEYS[2] - 剩余重试次数结构
 // KEYS[3] - 待重试队列
-// ARGV[1] - 确认消费成功超时时间
+// ARGV[1] - 确认处理成功超时时间
 var S5 = redis.NewScript(`
 local doRetry = function(ids)
 	-- 获取剩余重试次数
