@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 //	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 1), Member: "3"})
 //	//rClient.ZAdd(context.Background(), "k1", redis.Z{Score: float64(time.Now().Unix() + 4), Member: "4"})
 //
-//	raw, err := dq.S4.Run(context.Background(), rClient, []string{"k1"}, "1", 112).Result()
+//	raw, err := dq.RetryToAciveScript.Run(context.Background(), rClient, []string{"k1"}, "1", 112).Result()
 //	if err != nil && !errors.Is(err, redis.Nil) {
 //		t.Fatal(err)
 //	}
@@ -71,7 +71,7 @@ func Test_S0(t *testing.T) {
 		"message body",
 		2,
 	}
-	raw, err := dq.S0.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.ScheduleScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func Test_S1(t *testing.T) {
 		time.Now().Unix(),
 		10,
 	}
-	raw, err := dq.S1.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.ScheduleToPendingScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func Test_S2(t *testing.T) {
 	var args = []interface{}{
 		time.Now().Unix() + 10,
 	}
-	raw, err := dq.S2.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.PendingToActiveScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func Test_S3(t *testing.T) {
 	var args = []interface{}{
 		time.Now().Unix(),
 	}
-	raw, err := dq.S3.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.ActiveToRetryScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func Test_S4(t *testing.T) {
 	var args = []interface{}{
 		time.Now().Unix() + 10,
 	}
-	raw, err := dq.S4.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.RetryToAciveScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}

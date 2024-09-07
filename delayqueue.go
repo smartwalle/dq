@@ -19,7 +19,7 @@ import (
 // 处理中队列(sorted set) - member: 消息id, score: 确认处理成功超时时间
 // 待重试队列(list) - element: 消息 uuid
 
-// S0 添加消息
+// ScheduleScript 添加消息
 // KEYS[1] - 延迟队列
 // KEYS[2] - 消息结构
 //
@@ -30,7 +30,7 @@ import (
 // ARGV[5] - 消息类型
 // ARGV[6] - 消息内容
 // ARGV[7] - 剩余重试次数
-var S0 = redis.NewScript(`
+var ScheduleScript = redis.NewScript(`
 -- 添加到[延迟队列]
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 -- 获取当前时间
@@ -40,13 +40,13 @@ local timestamp = tonumber(time[1])
 redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'tp', ARGV[5], 'pl', ARGV[6], 'dt', timestamp, 'rc', ARGV[7])
 `)
 
-// S1 将消息从[延迟队列]转移到[待处理队列]
+// ScheduleToPendingScript 将消息从[延迟队列]转移到[待处理队列]
 // KEYS[1] - 延迟队列
 // KEYS[2] - 待处理队列
 // KEYS[3] - TaskKeyPrefix
 // ARGV[1] - 消费时间
 // ARGV[2] - 单次处理数量
-var S1 = redis.NewScript(`
+var ScheduleToPendingScript = redis.NewScript(`
 local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
 if (#ids > 0) then
     for _, id in ipairs(ids) do
@@ -60,11 +60,11 @@ if (#ids > 0) then
 end
 `)
 
-// S2 将消息从[待处理队列]转移到[处理中队列]
+// PendingToActiveScript 将消息从[待处理队列]转移到[处理中队列]
 // KEYS[1] - 待处理队列
 // KEYS[2] - 处理中队列
 // ARGV[1] - 确认处理成功超时时间
-var S2 = redis.NewScript(`
+var PendingToActiveScript = redis.NewScript(`
 local uuid = redis.call('LPOP', KEYS[1])
 if (not uuid) then
     return ''
@@ -73,12 +73,12 @@ redis.call('ZADD', KEYS[2], ARGV[1], uuid)
 return uuid
 `)
 
-// S3
+// ActiveToRetryScript 将[处理中队列]中已经消费超时的消息转移到[待重试队列]
 // KEYS[1] - 处理中队列
 // KEYS[2] - 待重试队列
 // KEYS[3] - TaskKeyPrefix
 // ARGV[1] - 确认处理成功超时时间
-var S3 = redis.NewScript(`
+var ActiveToRetryScript = redis.NewScript(`
 local doRetry = function(uuid)
     local key = KEYS[3]..uuid
 
@@ -96,11 +96,11 @@ local doRetry = function(uuid)
     end
 end
 
--- 获取[处理中队列]中已经消费超时的数据
+-- 获取[处理中队列]中已经消费超时的消息
 local uuids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
 if (#uuids > 0) then
     for _, uuid in ipairs(uuids) do
-        -- 从[处理中队列]中删除已经消费超时的数据
+        -- 从[处理中队列]中删除已经消费超时的消息
         redis.call('ZREM', KEYS[1], uuid)
         -- 是否需要重试处理
         doRetry(uuid)
@@ -108,11 +108,11 @@ if (#uuids > 0) then
 end
 `)
 
-// S4 将消息从[待重试队列]转移到[处理中队列]
+// RetryToAciveScript 将消息从[待重试队列]转移到[处理中队列]
 // KEYS[1] - 待重试队列
 // KEYS[2] - 处理中队列
 // ARGV[1] - 确认处理成功超时时间
-var S4 = redis.NewScript(`
+var RetryToAciveScript = redis.NewScript(`
 local uuid = redis.call('LPOP', KEYS[1])
 if (not uuid) then
     return ''
@@ -121,11 +121,11 @@ redis.call('ZADD', KEYS[2], ARGV[1], uuid)
 return uuid
 `)
 
-// S5 延长消费成功超时时间
+// RenewActiveTimeoutScript 延长[处理中队列]消息的消费成功超时时间
 // KEYS[1] - 处理中队列
 // ARGV[1] - 消息 uuid
 // ARGV[2] - 确认处理成功超时时间
-var S5 = redis.NewScript(`
+var RenewActiveTimeoutScript = redis.NewScript(`
 local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
 if (not score) then
 	return
