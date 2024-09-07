@@ -5,6 +5,7 @@ import (
 	"dq"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"os"
 	"testing"
@@ -48,7 +49,7 @@ func Test_QueueKey(t *testing.T) {
 	t.Log(dq.ScheduleKey("mail"))
 	t.Log(dq.PendingKey("mail"))
 	t.Log(dq.ActiveKey("mail"))
-	t.Log(dq.RetryCountKey("mail"))
+	t.Log(dq.RetryKey("mail"))
 	t.Log(dq.TaskKey("mail", "11"))
 	t.Log(dq.TaskKey("mail", "22"))
 }
@@ -60,17 +61,88 @@ func Test_S0(t *testing.T) {
 	var keys = []string{
 		dq.ScheduleKey(queue),
 		dq.TaskKey(queue, id),
-		dq.RetryCountKey(queue),
 	}
 	var args = []interface{}{
 		id,
+		uuid.New().String(),
 		time.Now().Unix(),
 		queue,
 		"send",
 		"message body",
-		10,
+		2,
 	}
 	raw, err := dq.S0.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_S1(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.ScheduleKey(queue),
+		dq.PendingKey(queue),
+		dq.TaskKeyPrefix(queue),
+	}
+	var args = []interface{}{
+		time.Now().Unix(),
+		10,
+	}
+	raw, err := dq.S1.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_S2(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.PendingKey(queue),
+		dq.ActiveKey(queue),
+	}
+	var args = []interface{}{
+		time.Now().Unix() + 10,
+	}
+	raw, err := dq.S2.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_S3(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.ActiveKey(queue),
+		dq.RetryKey(queue),
+		dq.TaskKeyPrefix(queue),
+	}
+	var args = []interface{}{
+		time.Now().Unix(),
+	}
+	raw, err := dq.S3.Run(context.Background(), redisClient, keys, args...).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		t.Fatal(err)
+	}
+	t.Log(raw)
+}
+
+func Test_S4(t *testing.T) {
+	var queue = "mail"
+
+	var keys = []string{
+		dq.RetryKey(queue),
+		dq.ActiveKey(queue),
+	}
+	var args = []interface{}{
+		time.Now().Unix() + 10,
+	}
+	raw, err := dq.S4.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
