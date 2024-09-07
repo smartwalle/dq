@@ -64,7 +64,7 @@ if (#ids > 0) then
     for _, id in ipairs(ids) do
         local k1 = KEYS[3]..id
         local uuid = redis.call('HGET', k1, 'uuid')
-		if uuid ~= nil and uuid ~= '' then
+		if (uuid ~= nil and uuid ~= '') then
 			local k2 = KEYS[3]..uuid
         	redis.call('RPUSH', KEYS[2], uuid)
 			redis.call('RENAME', k1, k2)
@@ -98,7 +98,7 @@ local doRetry = function(uuid)
 
     -- 获取剩余重试次数
     local count = redis.call('HGET', key, 'rc')
-    if count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0 then
+    if (count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0) then
         -- 剩余重试次数大于 0
         -- 更新剩余重试次数
         redis.call('HINCRBY', key, 'rc', -1)
@@ -116,8 +116,10 @@ end
 local uuids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
 if (#uuids > 0) then
     for _, uuid in ipairs(uuids) do
-        -- 重试处理逻辑
-        doRetry(uuid)
+		if (uuid ~= nil and uuid ~= '') then
+			-- 重试处理逻辑
+        	doRetry(uuid)
+		end
     end
 end
 `)
