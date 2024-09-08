@@ -1,6 +1,13 @@
 package dq
 
-import "time"
+import (
+	"github.com/google/uuid"
+	"time"
+)
+
+func NewUUID() string {
+	return uuid.New().String()
+}
 
 // Message 消息结构 (hash)
 type Message struct {
@@ -10,6 +17,23 @@ type Message struct {
 	payload   string // 消息内容 - pl
 	retry     int    // 剩余重试次数 - rc
 	deliverAt int64  // 投递时间
+	timeout   int64  // 执行超时时间
+}
+
+func (m *Message) ID() string {
+	return m.id
+}
+
+func (m *Message) UUID() string {
+	return m.uuid
+}
+
+func (m *Message) Queue() string {
+	return m.queue
+}
+
+func (m *Message) Payload() string {
+	return m.payload
 }
 
 type MessageOption func(m *Message)
@@ -37,5 +61,11 @@ func WithPayload(payload string) MessageOption {
 func WithMaxRetry(maxRetry int) MessageOption {
 	return func(m *Message) {
 		m.retry = maxRetry
+	}
+}
+
+func WithTimeout(seconds int64) MessageOption {
+	return func(m *Message) {
+		m.timeout = seconds
 	}
 }

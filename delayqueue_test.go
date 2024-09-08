@@ -89,7 +89,6 @@ func Test_ScheduleToPendingScript(t *testing.T) {
 		dq.MessageKeyPrefix(queue),
 	}
 	var args = []interface{}{
-		time.Now().Unix(),
 		10,
 	}
 	raw, err := dq.ScheduleToPendingScript.Run(context.Background(), redisClient, keys, args...).Result()
@@ -106,10 +105,7 @@ func Test_PendingToActiveScript(t *testing.T) {
 		dq.PendingKey(queue),
 		dq.ActiveKey(queue),
 	}
-	var args = []interface{}{
-		time.Now().Unix() + 10,
-	}
-	raw, err := dq.PendingToActiveScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.PendingToActiveScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -124,10 +120,7 @@ func Test_ActiveToRetryScript(t *testing.T) {
 		dq.RetryKey(queue),
 		dq.MessageKeyPrefix(queue),
 	}
-	var args = []interface{}{
-		time.Now().Unix(),
-	}
-	raw, err := dq.ActiveToRetryScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.ActiveToRetryScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -176,10 +169,7 @@ func Test_RetryToAciveScript(t *testing.T) {
 		dq.RetryKey(queue),
 		dq.ActiveKey(queue),
 	}
-	var args = []interface{}{
-		time.Now().Unix() + 10,
-	}
-	raw, err := dq.RetryToAciveScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.RetryToAciveScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -188,8 +178,10 @@ func Test_RetryToAciveScript(t *testing.T) {
 
 func TestDelayQueue_Enqueue(t *testing.T) {
 	var q = dq.NewDelayQueue(redisClient, "mail")
-	var err = q.Enqueue(context.Background(), fmt.Sprintf("%d", time.Now().UnixNano()), dq.WithDeliverAt(time.Time{}))
-	if err != nil {
-		t.Fatal(err)
+	for i := 0; i < 1000; i++ {
+		var err = q.Enqueue(context.Background(), fmt.Sprintf("%d", time.Now().UnixNano()), dq.WithDeliverAfter(10))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
