@@ -1,15 +1,18 @@
 package dq
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"strings"
 )
 
 // 消息结构(hash)
 // id -- 消息业务id
 // uuid -- 消息唯一id
 // qn -- 队列名称
-// tp -- 消息类型
 // pl -- 消息内容
 // dt -- 消息投递时间
 // rc -- 剩余重试次数
@@ -27,7 +30,6 @@ import (
 // ARGV[2] - 消息 uuid
 // ARGV[3] - 消费时间
 // ARGV[4] - 队列名称
-// ARGV[5] - 消息类型
 // ARGV[6] - 消息内容
 // ARGV[7] - 剩余重试次数
 var ScheduleScript = redis.NewScript(`
@@ -37,7 +39,7 @@ redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 local time = redis.call('TIME')
 local timestamp = tonumber(time[1])
 -- 写入消息结构
-redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'tp', ARGV[5], 'pl', ARGV[6], 'dt', timestamp, 'rc', ARGV[7])
+redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'pl', ARGV[5], 'rc', ARGV[6], 'dt', timestamp)
 `)
 
 // RemoveScript 删除消息
@@ -234,4 +236,38 @@ func NewDelayQueue(client redis.UniversalClient, name string) *DelayQueue {
 	q.client = client
 	q.name = name
 	return q
+}
+
+func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOption) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return errors.New("必须指定消息 id")
+	}
+	var m = &Message{}
+	m.id = id
+	m.uuid = uuid.New().String()
+	m.queue = q.name
+	for _, opt := range opts {
+		if opt != nil {
+			opt(m)
+		}
+	}
+
+	var keys = []string{
+		ScheduleKey(q.name),
+		MessageKey(q.name, m.id),
+	}
+	var args = []interface{}{
+		m.id,
+		m.uuid,
+		m.deliverAt,
+		m.queue,
+		m.payload,
+		m.retry,
+	}
+	_, err := ScheduleScript.Run(ctx, q.client, keys, args).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return err
+	}
+	return nil
 }

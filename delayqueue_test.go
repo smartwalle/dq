@@ -52,7 +52,6 @@ func Test_ScheduleScript(t *testing.T) {
 		uuid.New().String(),
 		time.Now().Unix(),
 		queue,
-		"send",
 		"message body",
 		2,
 	}
@@ -185,4 +184,12 @@ func Test_RetryToAciveScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(raw)
+}
+
+func TestDelayQueue_Enqueue(t *testing.T) {
+	var q = dq.NewDelayQueue(redisClient, "mail")
+	var err = q.Enqueue(context.Background(), fmt.Sprintf("%d", time.Now().UnixNano()), dq.WithDeliverAt(time.Time{}))
+	if err != nil {
+		t.Fatal(err)
+	}
 }
