@@ -107,6 +107,7 @@ local doRetry = function(uuid)
     else
         -- 删除[消息结构]
         redis.call('DEL', key)
+		-- TODO 记录失败消息
     end
 	-- 从[处理中队列]中删除消息
 	redis.call('ZREM', KEYS[1], uuid)
