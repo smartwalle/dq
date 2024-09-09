@@ -38,38 +38,83 @@ func MessageKey(qname, id string) string {
 	return fmt.Sprintf("%s%s", MessageKeyPrefix(qname), id)
 }
 
-const (
-	kStatusPending   = 0 // 待消费
-	kStatusConsuming = 1 // 消费中
-)
+type Handler func(m *Message) bool
 
-type Handler func(m *Message) error
+type Option func(q *DelayQueue)
 
-type DelayQueue struct {
-	client redis.UniversalClient
-	name   string
-	mu     *sync.Mutex
-	status int8
-	close  chan struct{}
+//func WithDefaultTimeout(seconds int64) Option {
+//	return func(q *DelayQueue) {
+//		if seconds < 5 {
+//			seconds = 5
+//		}
+//		q.timeout = seconds
+//	}
+//}
 
-	defaultTimeout int64
+func WithFetchLimit(limit int) Option {
+	return func(q *DelayQueue) {
+		if limit < 0 {
+			limit = 1
+		}
+		q.fetchLimit = limit
+	}
 }
 
-func NewDelayQueue(client redis.UniversalClient, name string) *DelayQueue {
+func WithFetchInterval(d time.Duration) Option {
+	return func(q *DelayQueue) {
+		if d <= 0 {
+			d = time.Second
+		}
+		q.fetchInterval = d
+	}
+}
+
+type DelayQueue struct {
+	client    redis.UniversalClient
+	name      string
+	mu        *sync.Mutex
+	consuming bool
+	close     chan struct{}
+
+	timeout       int64         // 消息执行超时时间
+	fetchLimit    int           // 单次最大消费量限制
+	fetchInterval time.Duration // 消费间隔时间
+}
+
+var (
+	ErrInvalidQUeueName   = errors.New("invalid queue name")
+	ErrInvalidRedisClient = errors.New("invalid redis client")
+	ErrInvalidMessageId   = errors.New("invalid message id")
+)
+
+func NewDelayQueue(client redis.UniversalClient, name string) (*DelayQueue, error) {
+	if client == nil {
+		return nil, ErrInvalidRedisClient
+	}
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		return nil, err
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ErrInvalidQUeueName
+	}
+
 	var q = &DelayQueue{}
 	q.client = client
 	q.name = name
 	q.mu = &sync.Mutex{}
-	q.status = kStatusPending
-	q.close = make(chan struct{}, 1)
-	q.defaultTimeout = 10
-	return q
+	q.consuming = false
+	q.timeout = 0
+	q.fetchLimit = 1000
+	q.fetchInterval = time.Second
+	return q, nil
 }
 
 func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOption) error {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return errors.New("必须指定消息 id")
+		return ErrInvalidMessageId
 	}
 	var m = &Message{}
 	m.id = id
@@ -82,7 +127,7 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 	}
 
 	if m.timeout <= 0 {
-		m.timeout = q.defaultTimeout
+		m.timeout = q.timeout
 	}
 
 	var keys = []string{
@@ -104,6 +149,25 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 	return nil
 }
 
+func (q *DelayQueue) Remove(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ErrInvalidMessageId
+	}
+
+	var keys = []string{
+		ScheduleKey(q.name),
+		MessageKey(q.name, id),
+	}
+	var args = []interface{}{
+		id,
+	}
+	if _, err := RemoveScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
+		return err
+	}
+	return nil
+}
+
 func (q *DelayQueue) scheduleToPending(ctx context.Context) error {
 	var keys = []string{
 		ScheduleKey(q.name),
@@ -111,7 +175,7 @@ func (q *DelayQueue) scheduleToPending(ctx context.Context) error {
 		MessageKeyPrefix(q.name),
 	}
 	var args = []interface{}{
-		1000,
+		q.fetchLimit,
 	}
 	if _, err := ScheduleToPendingScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
@@ -123,7 +187,6 @@ func (q *DelayQueue) pendingToActiveScript(ctx context.Context) (string, error) 
 	var keys = []string{
 		PendingKey(q.name),
 		ActiveKey(q.name),
-		MessageKeyPrefix(q.name),
 	}
 	raw, err := PendingToActiveScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -137,7 +200,6 @@ func (q *DelayQueue) activeToRetryScript(ctx context.Context) error {
 	var keys = []string{
 		ActiveKey(q.name),
 		RetryKey(q.name),
-		MessageKeyPrefix(q.name),
 	}
 
 	_, err := ActiveToRetryScript.Run(ctx, q.client, keys).Result()
@@ -163,12 +225,9 @@ func (q *DelayQueue) retryToAciveScript(ctx context.Context) (string, error) {
 func (q *DelayQueue) ack(ctx context.Context, uuid string) error {
 	var keys = []string{
 		ActiveKey(q.name),
-		MessageKeyPrefix(q.name),
+		MessageKey(q.name, uuid),
 	}
-	var args = []interface{}{
-		uuid,
-	}
-	_, err := AckScript.Run(ctx, q.client, keys, args).Result()
+	_, err := AckScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
@@ -179,12 +238,9 @@ func (q *DelayQueue) nack(ctx context.Context, uuid string) error {
 	var keys = []string{
 		ActiveKey(q.name),
 		RetryKey(q.name),
-		MessageKeyPrefix(q.name),
+		MessageKey(q.name, uuid),
 	}
-	var args = []interface{}{
-		uuid,
-	}
-	_, err := NackScript.Run(ctx, q.client, keys, args).Result()
+	_, err := NackScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
@@ -207,13 +263,10 @@ func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Ha
 	m.queue = data["qn"]
 	m.payload = data["pl"]
 
-	err = handler(m)
-	if err != nil {
-		q.nack(ctx, uuid)
-		return err
+	if ok := handler(m); ok {
+		return q.ack(ctx, uuid)
 	}
-	q.ack(ctx, uuid)
-	return nil
+	return q.nack(ctx, uuid)
 }
 
 func (q *DelayQueue) consume(ctx context.Context, handler Handler) (err error) {
@@ -261,13 +314,14 @@ func (q *DelayQueue) consume(ctx context.Context, handler Handler) (err error) {
 func (q *DelayQueue) StartConsume(handler Handler) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.status == kStatusConsuming {
+	if q.consuming {
 		return nil
 	}
-	q.status = kStatusConsuming
+	q.consuming = true
+	q.close = make(chan struct{}, 1)
 
 	go func() {
-		var ticker = time.NewTicker(time.Second)
+		var ticker = time.NewTicker(q.fetchInterval)
 	runLoop:
 		for {
 			select {
@@ -293,10 +347,10 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 func (q *DelayQueue) StopConsume() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.status != kStatusConsuming {
+	if !q.consuming {
 		return nil
 	}
-	q.status = kStatusPending
+	q.consuming = false
 	close(q.close)
 	return nil
 }

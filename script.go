@@ -39,14 +39,13 @@ redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'pl'
 
 // RemoveScript 删除消息
 // KEYS[1] - 延迟队列
-// KEYS[2] - MessageKeyPrefix
-// ARGV[1] - 消息 id
+// KEYS[2] - MessageKey(id)
+// ARGV[1] - id
 var RemoveScript = redis.NewScript(`
 -- 从[延迟队列]删除
 redis.call('ZREM', KEYS[1], ARGV[1])
 -- 删除消息结构
-local key = KEYS[2]..ARGV[1]
-redis.call('DEL', key)
+redis.call('DEL', KEYS[2])
 `)
 
 // ScheduleToPendingScript 将消息从[延迟队列]转移到[待处理队列]
@@ -57,17 +56,21 @@ redis.call('DEL', key)
 var ScheduleToPendingScript = redis.NewScript(`
 -- 获取当前时间
 local time = redis.call('TIME')
-local timestamp = tonumber(time[1])
+local milliseconds = time[1] * 1000 + math.floor(time[2] / 1000)
 
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', timestamp, 'LIMIT', 0, ARGV[1])
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', milliseconds, 'LIMIT', 0, ARGV[1])
 if (#ids > 0) then
     for _, id in ipairs(ids) do
-        local k1 = KEYS[3]..id
-        local uuid = redis.call('HGET', k1, 'uuid')
-		if (uuid ~= nil and uuid ~= '') then
-			local k2 = KEYS[3]..uuid
-        	redis.call('RPUSH', KEYS[2], uuid)
-			redis.call('RENAME', k1, k2)
+        local mKey = KEYS[3]..id
+		-- 判断消息结构是否存在
+		local exists = redis.call('EXISTS', mKey)
+		if (exists == 1) then
+			local uuid = redis.call('HGET', mKey, 'uuid')
+			if (uuid ~= nil and uuid ~= '') then
+				local newKey = KEYS[3]..uuid
+				redis.call('RPUSH', KEYS[2], newKey)
+				redis.call('RENAME', mKey, newKey)
+			end
 		end
         redis.call('ZREM', KEYS[1], id)
     end
@@ -77,26 +80,38 @@ end
 // PendingToActiveScript 将消息从[待处理队列]转移到[处理中队列]
 // KEYS[1] - 待处理队列
 // KEYS[2] - 处理中队列
-// KEYS[3] - MessageKeyPrefix
 var PendingToActiveScript = redis.NewScript(`
-local uuid = redis.call('LPOP', KEYS[1])
-if (not uuid) then
+local key = redis.call('LPOP', KEYS[1])
+if (not key) then
     return ''
 end
-local key = KEYS[3]..uuid
--- 获取消息的执行超时时间
-local timeout = redis.call('HGET', key, 'to')
-redis.call('ZADD', KEYS[2], timeout, uuid)
+-- 判断消息结构是否存在
+local exists = redis.call('EXISTS', key)
+if (exists == 0) then 
+	return ''
+end
+
+-- 获取当前时间
+local time = redis.call('TIME')
+local milliseconds = time[1] * 1000 + math.floor(time[2] / 1000)
+-- 获取消息 uuid
+local uuid = redis.call('HGET', key, 'uuid')
+-- 计算消息的执行超时时间
+local timeout = milliseconds + (redis.call('HGET', key, 'to') * 1000)
+redis.call('ZADD', KEYS[2], timeout, key)
 return uuid
 `)
 
 // ActiveToRetryScript 将[处理中队列]中已经消费超时的消息转移到[待重试队列]
 // KEYS[1] - 处理中队列
 // KEYS[2] - 待重试队列
-// KEYS[3] - MessageKeyPrefix
 var ActiveToRetryScript = redis.NewScript(`
-local doRetry = function(uuid)
-    local key = KEYS[3]..uuid
+local doRetry = function(key)
+	-- 判断消息结构是否存在
+	local exists = redis.call('EXISTS', key)
+	if (exists == 0) then
+		return 
+	end
 
     -- 获取剩余重试次数
     local count = redis.call('HGET', key, 'rc')
@@ -105,27 +120,27 @@ local doRetry = function(uuid)
         -- 更新剩余重试次数
         redis.call('HINCRBY', key, 'rc', -1)
         -- 添加到[待重试队列]中
-        redis.call('RPUSH', KEYS[2], uuid)
+        redis.call('RPUSH', KEYS[2], key)
     else
         -- 删除[消息结构]
         redis.call('DEL', key)
 		-- TODO 记录失败消息
     end
 	-- 从[处理中队列]中删除消息
-	redis.call('ZREM', KEYS[1], uuid)
+	redis.call('ZREM', KEYS[1], key)
 end
 
 -- 获取当前时间
 local time = redis.call('TIME')
-local timestamp = tonumber(time[1])
+local milliseconds = time[1] * 1000 + math.floor(time[2] / 1000)
 
 -- 获取[处理中队列]中已经消费超时的消息
-local uuids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', timestamp)
-if (#uuids > 0) then
-    for _, uuid in ipairs(uuids) do
-		if (uuid ~= nil and uuid ~= '') then
+local keys = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', milliseconds)
+	if (#keys > 0) then
+    for _, key in ipairs(keys) do
+		if (key ~= nil and key ~= '') then
 			-- 重试处理逻辑
-        	doRetry(uuid)
+        	doRetry(key)
 		end
     end
 end
@@ -133,33 +148,36 @@ end
 
 // AckScript 消费成功
 // KEYS[1] - 处理中队列
-// KEYS[2] - MessageKeyPrefix
-// ARGV[1] - 消息 uuid
+// KEYS[2] - MessageKey(uuid)
 var AckScript = redis.NewScript(`
-local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+local key = KEYS[2]
+local score = redis.call('ZSCORE', KEYS[1], key)
 if (not score) then
 	return
 end
 
 -- 从[处理中队列]删除
-redis.call('ZREM', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[1], key)
 -- 删除消息结构
-local key = KEYS[2]..ARGV[1]
 redis.call('DEL', key)
 `)
 
 // NackScript 消费失败
 // KEYS[1] - 处理中队列
 // KEYS[2] - 待重试队列
-// KEYS[3] - MessageKeyPrefix
-// ARGV[1] - 消息 uuid
+// KEYS[3] - MessageKey(uuid)
 var NackScript = redis.NewScript(`
-local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+local key = KEYS[3]
+local score = redis.call('ZSCORE', KEYS[1], key)
 if (not score) then
-	return 
+	return ''
 end
 
-local key = KEYS[3]..ARGV[1]
+-- 判断消息结构是否存在
+local exists = redis.call('EXISTS', key)
+if (exists == 0) then
+	return 
+end
 
 -- 获取剩余重试次数
 local count = redis.call('HGET', key, 'rc')
@@ -168,28 +186,37 @@ if count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0 then
     -- 更新剩余重试次数
     redis.call('HINCRBY', key, 'rc', -1)
     -- 添加到[待重试队列]中
-    redis.call('RPUSH', KEYS[2], ARGV[1])
+    redis.call('RPUSH', KEYS[2], key)
 else
     -- 删除[消息结构]
     redis.call('DEL', key)
 end
 -- 从[处理中队列]中删除消息
-redis.call('ZREM', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[1], key)
 `)
 
 // RetryToAciveScript 将消息从[待重试队列]转移到[处理中队列]
 // KEYS[1] - 待重试队列
 // KEYS[2] - 处理中队列
-// KEYS[3] - MessageKeyPrefix
 var RetryToAciveScript = redis.NewScript(`
-local uuid = redis.call('LPOP', KEYS[1])
-if (not uuid) then
+local key = redis.call('LPOP', KEYS[1])
+if (not key) then
     return ''
 end
-local key = KEYS[3]..uuid
--- 获取消息的执行超时时间
-local timeout = redis.call('HGET', key, 'to')
-redis.call('ZADD', KEYS[2], timeout, uuid)
+-- 判断消息结构是否存在
+local exists = redis.call('EXISTS', key)
+if (exists == 0) then
+	return ''
+end
+
+-- 获取当前时间
+local time = redis.call('TIME')
+local milliseconds = time[1] * 1000 + math.floor(time[2] / 1000)
+-- 获取消息 uuid
+local uuid = redis.call('HGET', key, 'uuid')
+-- 计算消息的执行超时时间
+local timeout = milliseconds + (redis.call('HGET', key, 'to') * 1000)
+redis.call('ZADD', KEYS[2], timeout, key)
 return uuid
 `)
 

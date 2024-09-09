@@ -41,14 +41,14 @@ type MessageOption func(m *Message)
 func WithDeliverAt(deliverAt time.Time) MessageOption {
 	return func(m *Message) {
 		if !deliverAt.IsZero() {
-			m.deliverAt = deliverAt.Unix()
+			m.deliverAt = deliverAt.UnixMilli()
 		}
 	}
 }
 
 func WithDeliverAfter(seconds int64) MessageOption {
 	return func(m *Message) {
-		m.deliverAt = time.Now().Unix() + seconds
+		m.deliverAt = time.Now().UnixMilli() + (seconds * 1000)
 	}
 }
 
@@ -64,8 +64,8 @@ func WithMaxRetry(maxRetry int) MessageOption {
 	}
 }
 
-func WithTimeout(seconds int64) MessageOption {
-	return func(m *Message) {
-		m.timeout = seconds
-	}
-}
+//func WithTimeout(seconds int64) MessageOption {
+//	return func(m *Message) {
+//		m.timeout = seconds
+//	}
+//}

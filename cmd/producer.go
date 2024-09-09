@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"dq"
 	"fmt"
 	"github.com/redis/go-redis/v9"
@@ -20,14 +21,9 @@ func main() {
 		fmt.Println("NewDelayQueue Error", err)
 		return
 	}
-	err = queue.StartConsume(func(m *dq.Message) bool {
-		fmt.Println(time.Now().UnixMilli(), m.ID(), m.UUID())
-		return false
-	})
-	if err != nil {
-		fmt.Println("Consume Error", err)
-		return
-	}
 
-	select {}
+	for i := 0; i < 1; i++ {
+		queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(1), dq.WithMaxRetry(1))
+		time.Sleep(time.Millisecond)
+	}
 }

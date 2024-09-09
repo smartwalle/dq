@@ -50,10 +50,11 @@ func Test_ScheduleScript(t *testing.T) {
 	var args = []interface{}{
 		id,
 		uuid.New().String(),
-		time.Now().Unix(),
+		time.Now().UnixMilli(),
 		queue,
 		"message body",
 		2,
+		10,
 	}
 	raw, err := dq.ScheduleScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -68,7 +69,7 @@ func Test_RemoveScript(t *testing.T) {
 
 	var keys = []string{
 		dq.ScheduleKey(queue),
-		dq.MessageKeyPrefix(queue),
+		dq.MessageKey(queue, id),
 	}
 	var args = []interface{}{
 		id,
@@ -118,7 +119,6 @@ func Test_ActiveToRetryScript(t *testing.T) {
 	var keys = []string{
 		dq.ActiveKey(queue),
 		dq.RetryKey(queue),
-		dq.MessageKeyPrefix(queue),
 	}
 	raw, err := dq.ActiveToRetryScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -132,12 +132,9 @@ func Test_AckScript(t *testing.T) {
 
 	var keys = []string{
 		dq.ActiveKey(queue),
-		dq.MessageKeyPrefix(queue),
+		dq.MessageKey(queue, "a2d0665c-e73a-41dd-a8e9-ebb25930ff73"),
 	}
-	var args = []interface{}{
-		"d7d46645-cac9-4ebb-b816-ba0278672ea2",
-	}
-	raw, err := dq.AckScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.AckScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -150,12 +147,9 @@ func Test_NackScript(t *testing.T) {
 	var keys = []string{
 		dq.ActiveKey(queue),
 		dq.RetryKey(queue),
-		dq.MessageKeyPrefix(queue),
+		dq.MessageKey(queue, "5748af6e-937d-4f6c-8b52-500892d998ea"),
 	}
-	var args = []interface{}{
-		"d7d46645-cac9-4ebb-b816-ba0278672ea2",
-	}
-	raw, err := dq.NackScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := dq.NackScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -177,7 +171,7 @@ func Test_RetryToAciveScript(t *testing.T) {
 }
 
 func TestDelayQueue_Enqueue(t *testing.T) {
-	var q = dq.NewDelayQueue(redisClient, "mail")
+	var q, _ = dq.NewDelayQueue(redisClient, "mail")
 	for i := 0; i < 1000; i++ {
 		var err = q.Enqueue(context.Background(), fmt.Sprintf("%d", time.Now().UnixNano()), dq.WithDeliverAfter(10))
 		if err != nil {
