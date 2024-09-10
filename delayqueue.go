@@ -2,6 +2,7 @@ package dq
 
 import (
 	"context"
+	"dq/internal"
 	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
@@ -87,7 +88,7 @@ var (
 	ErrInvalidMessageId   = errors.New("invalid message id")
 )
 
-func NewDelayQueue(client redis.UniversalClient, name string) (*DelayQueue, error) {
+func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*DelayQueue, error) {
 	if client == nil {
 		return nil, ErrInvalidRedisClient
 	}
@@ -108,6 +109,12 @@ func NewDelayQueue(client redis.UniversalClient, name string) (*DelayQueue, erro
 	q.timeout = 0
 	q.fetchLimit = 1000
 	q.fetchInterval = time.Second
+	for _, opt := range opts {
+		if opt != nil {
+			opt(q)
+		}
+	}
+	fmt.Println(q.fetchInterval)
 	return q, nil
 }
 
@@ -143,7 +150,7 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 		m.retry,
 		m.timeout,
 	}
-	if _, err := ScheduleScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
+	if _, err := internal.ScheduleScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
 	return nil
@@ -162,7 +169,7 @@ func (q *DelayQueue) Remove(ctx context.Context, id string) error {
 	var args = []interface{}{
 		id,
 	}
-	if _, err := RemoveScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
+	if _, err := internal.RemoveScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
 	return nil
@@ -177,7 +184,7 @@ func (q *DelayQueue) scheduleToPending(ctx context.Context) error {
 	var args = []interface{}{
 		q.fetchLimit,
 	}
-	if _, err := ScheduleToPendingScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
+	if _, err := internal.ScheduleToPendingScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
 	return nil
@@ -188,7 +195,7 @@ func (q *DelayQueue) pendingToActiveScript(ctx context.Context) (string, error) 
 		PendingKey(q.name),
 		ActiveKey(q.name),
 	}
-	raw, err := PendingToActiveScript.Run(ctx, q.client, keys).Result()
+	raw, err := internal.PendingToActiveScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return "", err
 	}
@@ -202,7 +209,7 @@ func (q *DelayQueue) activeToRetryScript(ctx context.Context) error {
 		RetryKey(q.name),
 	}
 
-	_, err := ActiveToRetryScript.Run(ctx, q.client, keys).Result()
+	_, err := internal.ActiveToRetryScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
@@ -214,7 +221,7 @@ func (q *DelayQueue) retryToAciveScript(ctx context.Context) (string, error) {
 		RetryKey(q.name),
 		ActiveKey(q.name),
 	}
-	raw, err := RetryToAciveScript.Run(ctx, q.client, keys).Result()
+	raw, err := internal.RetryToAciveScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return "", err
 	}
@@ -227,7 +234,7 @@ func (q *DelayQueue) ack(ctx context.Context, uuid string) error {
 		ActiveKey(q.name),
 		MessageKey(q.name, uuid),
 	}
-	_, err := AckScript.Run(ctx, q.client, keys).Result()
+	_, err := internal.AckScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
@@ -240,7 +247,7 @@ func (q *DelayQueue) nack(ctx context.Context, uuid string) error {
 		RetryKey(q.name),
 		MessageKey(q.name, uuid),
 	}
-	_, err := NackScript.Run(ctx, q.client, keys).Result()
+	_, err := internal.NackScript.Run(ctx, q.client, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}

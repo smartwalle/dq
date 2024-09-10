@@ -1,8 +1,9 @@
-package dq_test
+package internal_test
 
 import (
 	"context"
 	"dq"
+	"dq/internal"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func Test_ScheduleScript(t *testing.T) {
 		2,
 		10,
 	}
-	raw, err := dq.ScheduleScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := internal.ScheduleScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func Test_RemoveScript(t *testing.T) {
 	var args = []interface{}{
 		id,
 	}
-	raw, err := dq.RemoveScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := internal.RemoveScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func Test_ScheduleToPendingScript(t *testing.T) {
 	var args = []interface{}{
 		10,
 	}
-	raw, err := dq.ScheduleToPendingScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := internal.ScheduleToPendingScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func Test_PendingToActiveScript(t *testing.T) {
 		dq.PendingKey(queue),
 		dq.ActiveKey(queue),
 	}
-	raw, err := dq.PendingToActiveScript.Run(context.Background(), redisClient, keys).Result()
+	raw, err := internal.PendingToActiveScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func Test_ActiveToRetryScript(t *testing.T) {
 		dq.ActiveKey(queue),
 		dq.RetryKey(queue),
 	}
-	raw, err := dq.ActiveToRetryScript.Run(context.Background(), redisClient, keys).Result()
+	raw, err := internal.ActiveToRetryScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -134,7 +135,7 @@ func Test_AckScript(t *testing.T) {
 		dq.ActiveKey(queue),
 		dq.MessageKey(queue, "a2d0665c-e73a-41dd-a8e9-ebb25930ff73"),
 	}
-	raw, err := dq.AckScript.Run(context.Background(), redisClient, keys).Result()
+	raw, err := internal.AckScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -149,7 +150,7 @@ func Test_NackScript(t *testing.T) {
 		dq.RetryKey(queue),
 		dq.MessageKey(queue, "5748af6e-937d-4f6c-8b52-500892d998ea"),
 	}
-	raw, err := dq.NackScript.Run(context.Background(), redisClient, keys).Result()
+	raw, err := internal.NackScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -163,19 +164,9 @@ func Test_RetryToAciveScript(t *testing.T) {
 		dq.RetryKey(queue),
 		dq.ActiveKey(queue),
 	}
-	raw, err := dq.RetryToAciveScript.Run(context.Background(), redisClient, keys).Result()
+	raw, err := internal.RetryToAciveScript.Run(context.Background(), redisClient, keys).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
 	t.Log(raw)
-}
-
-func TestDelayQueue_Enqueue(t *testing.T) {
-	var q, _ = dq.NewDelayQueue(redisClient, "mail")
-	for i := 0; i < 1000; i++ {
-		var err = q.Enqueue(context.Background(), fmt.Sprintf("%d", time.Now().UnixNano()), dq.WithDeliverAfter(10))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 }

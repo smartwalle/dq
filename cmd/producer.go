@@ -22,8 +22,8 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 1; i++ {
-		queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(1), dq.WithMaxRetry(1))
+	for i := 0; i < 1000000000; i++ {
+		queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1))
 		time.Sleep(time.Millisecond)
 	}
 }

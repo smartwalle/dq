@@ -22,7 +22,7 @@ func main() {
 	}
 	err = queue.StartConsume(func(m *dq.Message) bool {
 		fmt.Println(time.Now().UnixMilli(), m.ID(), m.UUID())
-		return false
+		return true
 	})
 	if err != nil {
 		fmt.Println("Consume Error", err)
