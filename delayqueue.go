@@ -2,10 +2,10 @@ package dq
 
 import (
 	"context"
-	"dq/internal"
 	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"github.com/smartwalle/dq/internal"
 	"strings"
 	"sync"
 	"time"

@@ -1,10 +1,9 @@
 package main
 
 import (
-	"context"
-	"dq"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"github.com/smartwalle/dq"
 	"time"
 )
 
@@ -21,9 +20,14 @@ func main() {
 		fmt.Println("NewDelayQueue Error", err)
 		return
 	}
-
-	for i := 0; i < 1000000000; i++ {
-		queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1))
-		time.Sleep(time.Millisecond)
+	err = queue.StartConsume(func(m *dq.Message) bool {
+		fmt.Println(time.Now().UnixMilli(), m.ID(), m.UUID())
+		return true
+	})
+	if err != nil {
+		fmt.Println("Consume Error", err)
+		return
 	}
+
+	select {}
 }
