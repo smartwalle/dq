@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/smartwalle/dq"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -29,5 +32,10 @@ func main() {
 		return
 	}
 
-	select {}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sig:
+	}
+	fmt.Println("Close", queue.StopConsume())
 }

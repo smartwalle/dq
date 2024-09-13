@@ -31,6 +31,10 @@ func RetryKey(qname string) string {
 	return fmt.Sprintf("%s:retry", QueueKey(qname))
 }
 
+func ConsumerKey(qname string) string {
+	return fmt.Sprintf("%s:consumers", QueueKey(qname))
+}
+
 func MessageKeyPrefix(qname string) string {
 	return fmt.Sprintf("%s:message:", QueueKey(qname))
 }
@@ -64,6 +68,7 @@ func WithFetchInterval(d time.Duration) Option {
 type DelayQueue struct {
 	client    redis.UniversalClient
 	name      string
+	uuid      string
 	mu        *sync.Mutex
 	consuming bool
 	close     chan struct{}
@@ -76,6 +81,7 @@ var (
 	ErrInvalidQUeueName   = errors.New("invalid queue name")
 	ErrInvalidRedisClient = errors.New("invalid redis client")
 	ErrInvalidMessageId   = errors.New("invalid message id")
+	ErrConsumerExists     = errors.New("consumer exists")
 )
 
 func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*DelayQueue, error) {
@@ -94,6 +100,7 @@ func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*
 	var q = &DelayQueue{}
 	q.client = client
 	q.name = name
+	q.uuid = NewUUID()
 	q.mu = &sync.Mutex{}
 	q.consuming = false
 	q.fetchLimit = 1000
@@ -103,8 +110,11 @@ func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*
 			opt(q)
 		}
 	}
-	fmt.Println(q.fetchInterval)
 	return q, nil
+}
+
+func (q *DelayQueue) UUID() string {
+	return q.uuid
 }
 
 func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOption) error {
@@ -306,10 +316,42 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.consuming {
-		return nil
+		return ErrConsumerExists
 	}
 	q.consuming = true
 	q.close = make(chan struct{}, 1)
+
+	// 上报消息者
+	value, err := q.client.ZAddNX(context.Background(), ConsumerKey(q.name), redis.Z{Member: q.uuid, Score: float64(time.Now().Unix() + 30)}).Result()
+	if err != nil {
+		return err
+	}
+	if value != 1 {
+		return ErrConsumerExists
+	}
+
+	go func() {
+		var ticker = time.NewTicker(time.Second * 10)
+	runLoop:
+		for {
+			select {
+			case <-q.close:
+				break runLoop
+			default:
+				select {
+				case <-ticker.C:
+					// 上报消费者存活状态
+					_, rErr := q.client.ZAddXX(context.Background(), ConsumerKey(q.name), redis.Z{Member: q.uuid, Score: float64(time.Now().Unix() + 30)}).Result()
+					if rErr != nil {
+						q.StopConsume()
+					}
+				case <-q.close:
+					break runLoop
+				}
+			}
+		}
+		ticker.Stop()
+	}()
 
 	go func() {
 		var ticker = time.NewTicker(q.fetchInterval)
@@ -341,6 +383,7 @@ func (q *DelayQueue) StopConsume() error {
 	if !q.consuming {
 		return nil
 	}
+	q.client.ZRem(context.Background(), ConsumerKey(q.name), q.uuid)
 	q.consuming = false
 	close(q.close)
 	return nil
