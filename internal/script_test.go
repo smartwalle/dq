@@ -55,7 +55,6 @@ func Test_ScheduleScript(t *testing.T) {
 		queue,
 		"message body",
 		2,
-		10,
 	}
 	raw, err := internal.ScheduleScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {

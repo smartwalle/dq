@@ -17,7 +17,6 @@ type Message struct {
 	payload   string // 消息内容 - pl
 	retry     int    // 剩余重试次数 - rc
 	deliverAt int64  // 投递时间
-	timeout   int64  // 执行超时时间
 }
 
 func (m *Message) ID() string {
@@ -63,9 +62,3 @@ func WithMaxRetry(maxRetry int) MessageOption {
 		m.retry = maxRetry
 	}
 }
-
-//func WithTimeout(seconds int64) MessageOption {
-//	return func(m *Message) {
-//		m.timeout = seconds
-//	}
-//}

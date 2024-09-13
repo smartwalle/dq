@@ -43,15 +43,6 @@ type Handler func(m *Message) bool
 
 type Option func(q *DelayQueue)
 
-//func WithDefaultTimeout(seconds int64) Option {
-//	return func(q *DelayQueue) {
-//		if seconds < 5 {
-//			seconds = 5
-//		}
-//		q.timeout = seconds
-//	}
-//}
-
 func WithFetchLimit(limit int) Option {
 	return func(q *DelayQueue) {
 		if limit < 0 {
@@ -77,7 +68,6 @@ type DelayQueue struct {
 	consuming bool
 	close     chan struct{}
 
-	timeout       int64         // 消息执行超时时间
 	fetchLimit    int           // 单次最大消费量限制
 	fetchInterval time.Duration // 消费间隔时间
 }
@@ -106,7 +96,6 @@ func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*
 	q.name = name
 	q.mu = &sync.Mutex{}
 	q.consuming = false
-	q.timeout = 0
 	q.fetchLimit = 1000
 	q.fetchInterval = time.Second
 	for _, opt := range opts {
@@ -133,10 +122,6 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 		}
 	}
 
-	if m.timeout <= 0 {
-		m.timeout = q.timeout
-	}
-
 	var keys = []string{
 		ScheduleKey(q.name),
 		MessageKey(q.name, m.id),
@@ -148,7 +133,6 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 		m.queue,
 		m.payload,
 		m.retry,
-		m.timeout,
 	}
 	if _, err := internal.ScheduleScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
