@@ -11,12 +11,18 @@ end
 -- 判断消息结构是否存在
 local exists = redis.call('EXISTS', key)
 if (exists == 0) then
-    return
+    return ''
 end
+
+-- 清除消费者id
+redis.call('HSET', key, 'c', '')
+
+-- 获取消息 uuid
+local uuid = redis.call('HGET', key, 'uuid')
 
 -- 获取剩余重试次数
 local count = redis.call('HGET', key, 'rc')
-if count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0 then
+if count ~= nil and count ~= '' and tonumber(count) > 0 then
     -- 剩余重试次数大于 0
     -- 更新剩余重试次数
     redis.call('HINCRBY', key, 'rc', -1)
@@ -28,3 +34,4 @@ else
 end
 -- 从[处理中队列]中删除消息
 redis.call('ZREM', KEYS[1], key)
+return uuid

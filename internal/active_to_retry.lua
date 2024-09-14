@@ -1,16 +1,28 @@
 -- KEYS[1] - 处理中队列
 -- KEYS[2] - 待重试队列
+-- KEYS[3] - 消费者队列
 
-local doRetry = function(key)
+local doRetry = function(key, now)
     -- 判断消息结构是否存在
     local exists = redis.call('EXISTS', key)
     if (exists == 0) then
         return
     end
 
+    -- 获取消费者的有效时间
+    local consumerTimeout = redis.call('ZSCORE', KEYS[3], ARGV[1])
+    if (consumerTimeout ~= nil and consumerTimeout ~= '') then
+        local timeout = tonumber(consumerTimeout)
+        if (timeout > now) then
+            -- 如果消费者的有效时间大于当前时间，则更新[处理中队列]中消息的消费超时时间
+            redis.call('ZADD', KEYS[1], timeout, key)
+            return
+        end
+    end
+
     -- 获取剩余重试次数
     local count = redis.call('HGET', key, 'rc')
-    if (count ~= nil and count ~= '' and count ~= false and tonumber(count) > 0) then
+    if (count ~= nil and count ~= '' and tonumber(count) > 0) then
         -- 剩余重试次数大于 0
         -- 更新剩余重试次数
         redis.call('HINCRBY', key, 'rc', -1)
@@ -21,6 +33,8 @@ local doRetry = function(key)
         redis.call('DEL', key)
         -- TODO 记录失败消息
     end
+    -- 清除消费者id
+    redis.call('HSET', key, 'c', '')
     -- 从[处理中队列]中删除消息
     redis.call('ZREM', KEYS[1], key)
 end
@@ -35,7 +49,7 @@ if (#keys > 0) then
     for _, key in ipairs(keys) do
         if (key ~= nil and key ~= '') then
             -- 重试处理逻辑
-            doRetry(key)
+            doRetry(key, milliseconds)
         end
     end
 end

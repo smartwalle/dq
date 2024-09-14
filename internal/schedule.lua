@@ -11,6 +11,6 @@
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 -- 获取当前时间
 local time = redis.call('TIME')
-local timestamp = tonumber(time[1])
+local seconds = tonumber(time[1])
 -- 写入消息结构
-redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'pl', ARGV[5], 'rc', ARGV[6], 'dt', timestamp)
+redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'pl', ARGV[5], 'rc', ARGV[6], 'dt', seconds)

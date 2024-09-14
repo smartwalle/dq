@@ -12,7 +12,7 @@ import (
 // pl -- 消息内容
 // dt -- 消息投递时间
 // rc -- 剩余重试次数
-// to -- 执行超时时间
+// c -- 当前消费者id
 
 // 延迟队列(sorted set) - member: 消息id，score: 消费时间
 // 待处理队列(list) - element: 消息 uuid
