@@ -369,6 +369,10 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 	return nil
 }
 
+func (q *DelayQueue) Consuming() bool {
+	return q.consuming
+}
+
 func (q *DelayQueue) StopConsume() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
