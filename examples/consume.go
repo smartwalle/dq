@@ -17,17 +17,14 @@ func main() {
 	opt.DB = 1
 
 	var rClient = redis.NewClient(opt)
-
-	var queue, err = dq.NewDelayQueue(rClient, "mail")
+	var queue, err = dq.NewDelayQueue(rClient, "mail", dq.WithFetchInterval(time.Millisecond*100))
 	if err != nil {
 		fmt.Println("NewDelayQueue Error", err)
 		return
 	}
 	err = queue.StartConsume(func(m *dq.Message) bool {
-		fmt.Println(time.Now().UnixMilli(), "1111", m.ID(), m.UUID())
-		time.Sleep(time.Second * 31)
-		fmt.Println(time.Now().UnixMilli(), "2222", m.ID(), m.UUID())
-		return false
+		fmt.Println(time.Now().UnixMilli(), "Consume", m.ID(), m.UUID())
+		return true
 	})
 	if err != nil {
 		fmt.Println("Consume Error", err)

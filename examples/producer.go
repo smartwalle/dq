@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/smartwalle/dq"
-	"time"
 )
 
 func main() {
@@ -22,8 +21,7 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 1; i++ {
-		fmt.Println(queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1)))
-		time.Sleep(time.Millisecond)
+	for i := 0; i < 100000; i++ {
+		fmt.Println(i, queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1)))
 	}
 }

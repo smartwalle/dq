@@ -27,7 +27,7 @@ func ConsumerKey(qname string) string {
 }
 
 func MessageKeyPrefix(qname string) string {
-	return fmt.Sprintf("%s:message:", QueueKey(qname))
+	return fmt.Sprintf("%s:m:", QueueKey(qname))
 }
 
 func MessageKey(qname, id string) string {

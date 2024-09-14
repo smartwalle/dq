@@ -3,7 +3,6 @@ package dq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/smartwalle/dq/internal"
 	"strings"
@@ -335,7 +334,6 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 				case <-ticker.C:
 					// 上报消费者存活状态
 					_, rErr := q.client.ZAddXX(context.Background(), internal.ConsumerKey(q.name), redis.Z{Member: q.uuid, Score: float64(time.Now().UnixMilli() + 30*1000)}).Result()
-					fmt.Println("xxxx", q.uuid)
 					if rErr != nil {
 						q.StopConsume()
 					}
