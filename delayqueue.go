@@ -3,6 +3,7 @@ package dq
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/smartwalle/dq/internal"
 	"strings"
@@ -224,6 +225,17 @@ func (q *DelayQueue) nack(ctx context.Context, uuid string) error {
 	return nil
 }
 
+func (q *DelayQueue) clearConsumer(ctx context.Context) error {
+	var keys = []string{
+		internal.ConsumerKey(q.name),
+	}
+	_, err := internal.ClearConsumerScript.Run(ctx, q.client, keys).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return err
+	}
+	return nil
+}
+
 func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Handler) error {
 	if uuid == "" {
 		return nil
@@ -265,6 +277,11 @@ func (q *DelayQueue) consume(ctx context.Context, handler Handler) (err error) {
 		if err = q.consumeMessage(ctx, uuid, handler); err != nil {
 			return err
 		}
+	}
+
+	// 清理超时的消费者
+	if err = q.clearConsumer(ctx); err != nil {
+		return err
 	}
 
 	// 处理消费超时的消息
@@ -318,6 +335,7 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 				case <-ticker.C:
 					// 上报消费者存活状态
 					_, rErr := q.client.ZAddXX(context.Background(), internal.ConsumerKey(q.name), redis.Z{Member: q.uuid, Score: float64(time.Now().UnixMilli() + 30*1000)}).Result()
+					fmt.Println("xxxx", q.uuid)
 					if rErr != nil {
 						q.StopConsume()
 					}

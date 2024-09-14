@@ -66,3 +66,9 @@ var retryToAciveScript string
 
 // RetryToAciveScript 将消息从[待重试队列]转移到[处理中队列]
 var RetryToAciveScript = redis.NewScript(retryToAciveScript)
+
+//go:embed clear_consumer.lua
+var clearConsumerScript string
+
+// ClearConsumerScript 清理超时的消费者
+var ClearConsumerScript = redis.NewScript(clearConsumerScript)
