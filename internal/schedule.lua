@@ -10,7 +10,7 @@
 -- 添加到[延迟队列]
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 -- 获取当前时间
-local time = redis.call('TIME')
-local seconds = tonumber(time[1])
+local now = redis.call('TIME')
+local seconds = tonumber(now[1])
 -- 写入消息结构
 redis.call('HMSET', KEYS[2], 'id', ARGV[1], 'uuid', ARGV[2], 'qn', ARGV[4], 'pl', ARGV[5], 'rc', ARGV[6], 'dt', seconds)
