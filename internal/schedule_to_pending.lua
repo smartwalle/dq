@@ -4,8 +4,8 @@
 -- ARGV[1] - 单次处理数量
 
 -- 获取当前时间
-local time = redis.call('TIME')
-local milliseconds = time[1] * 1000 + math.floor(time[2] / 1000)
+local now = redis.call('TIME')
+local milliseconds = now[1] * 1000 + math.floor(now[2] / 1000)
 
 local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', milliseconds, 'LIMIT', 0, ARGV[1])
 if (#ids > 0) then
@@ -16,9 +16,9 @@ if (#ids > 0) then
         if (exists == 1) then
             local uuid = redis.call('HGET', mKey, 'uuid')
             if (uuid ~= nil and uuid ~= '') then
-                local newKey = KEYS[3]..uuid
-                redis.call('RPUSH', KEYS[2], newKey)
-                redis.call('RENAME', mKey, newKey)
+                local nKey = KEYS[3]..uuid
+                redis.call('RPUSH', KEYS[2], nKey)
+                redis.call('RENAME', mKey, nKey)
             end
         end
         redis.call('ZREM', KEYS[1], id)
