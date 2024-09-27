@@ -3,13 +3,13 @@
 -- KEYS[3] - 消费者队列
 -- ARGV[1] - 消费者id
 
-local key = redis.call('LPOP', KEYS[1])
-if (not key) then
+local mKey = redis.call('LPOP', KEYS[1])
+if (not mKey) then
     return ''
 end
 -- 判断消息结构是否存在
-local exists = redis.call('EXISTS', key)
-if (exists == 0) then
+local found = redis.call('EXISTS', mKey)
+if (found == 0) then
     return ''
 end
 
@@ -18,11 +18,11 @@ local consumerTimeout = redis.call('ZSCORE', KEYS[3], ARGV[1])
 if (consumerTimeout ~= nil and consumerTimeout ~= '') then
     local timeout = tonumber(consumerTimeout)
     -- 获取消息 uuid
-    local uuid = redis.call('HGET', key, 'uuid')
+    local uuid = redis.call('HGET', mKey, 'uuid')
     -- 设置消费者id
-    redis.call('HSET', key, 'c', ARGV[1])
+    redis.call('HSET', mKey, 'c', ARGV[1])
     -- 添加到[处理中队列]
-    redis.call('ZADD', KEYS[2], timeout, key)
+    redis.call('ZADD', KEYS[2], timeout, mKey)
     return uuid
 end
 return ''
