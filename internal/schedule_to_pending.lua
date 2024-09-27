@@ -12,8 +12,8 @@ if (#ids > 0) then
     for _, id in ipairs(ids) do
         local mKey = KEYS[3]..id
         -- 判断消息结构是否存在
-        local exists = redis.call('EXISTS', mKey)
-        if (exists == 1) then
+        local found = redis.call('EXISTS', mKey)
+        if (found == 1) then
             local uuid = redis.call('HGET', mKey, 'uuid')
             if (uuid ~= nil and uuid ~= '') then
                 local nKey = KEYS[3]..uuid
