@@ -1,6 +1,7 @@
 -- KEYS[1] - 处理中队列
 -- KEYS[2] - 待重试队列
 -- KEYS[3] - 消费者队列
+-- ARGV[1] - 重试延迟时间（秒）
 
 local toRetry = function(mKey, now)
     -- 判断消息结构是否存在
@@ -33,7 +34,8 @@ local toRetry = function(mKey, now)
         -- 清除消费者id
         redis.call('HSET', mKey, 'c', '')
         -- 添加到[待重试队列]中
-        redis.call('RPUSH', KEYS[2], mKey)
+        local timeout = now+ARGV[1] * 1000
+        redis.call('ZADD', KEYS[2], timeout, mKey)
     else
         -- 删除[消息结构]
         redis.call('DEL', mKey)

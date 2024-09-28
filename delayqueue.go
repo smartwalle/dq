@@ -32,6 +32,15 @@ func WithFetchInterval(d time.Duration) Option {
 	}
 }
 
+func WithRetryDelay(seconds int) Option {
+	return func(q *DelayQueue) {
+		if seconds <= 0 {
+			q.retryDelay = 5
+		}
+		q.retryDelay = seconds
+	}
+}
+
 type DelayQueue struct {
 	client    redis.UniversalClient
 	name      string
@@ -42,6 +51,7 @@ type DelayQueue struct {
 
 	fetchLimit    int           // 单次最大消费量限制
 	fetchInterval time.Duration // 消费间隔时间
+	retryDelay    int           // 重试延迟时间（秒）
 }
 
 var (
@@ -72,6 +82,7 @@ func NewDelayQueue(client redis.UniversalClient, name string, opts ...Option) (*
 	q.consuming = false
 	q.fetchLimit = 1000
 	q.fetchInterval = time.Second
+	q.retryDelay = 5
 	for _, opt := range opts {
 		if opt != nil {
 			opt(q)
@@ -174,8 +185,11 @@ func (q *DelayQueue) activeToRetryScript(ctx context.Context) error {
 		internal.RetryKey(q.name),
 		internal.ConsumerKey(q.name),
 	}
+	var args = []interface{}{
+		q.retryDelay,
+	}
 
-	_, err := internal.ActiveToRetryScript.Run(ctx, q.client, keys).Result()
+	_, err := internal.ActiveToRetryScript.Run(ctx, q.client, keys, args).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
@@ -217,7 +231,10 @@ func (q *DelayQueue) nack(ctx context.Context, uuid string) error {
 		internal.RetryKey(q.name),
 		internal.MessageKey(q.name, uuid),
 	}
-	_, err := internal.NackScript.Run(ctx, q.client, keys).Result()
+	var args = []interface{}{
+		q.retryDelay,
+	}
+	_, err := internal.NackScript.Run(ctx, q.client, keys, args).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
