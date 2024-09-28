@@ -87,7 +87,7 @@ func reportConsumer(t *testing.T) {
 	}
 }
 
-func Test_ScheduleToPendingScript(t *testing.T) {
+func Test_PendingToReadyScript(t *testing.T) {
 	reportConsumer(t)
 
 	var keys = []string{
@@ -105,7 +105,7 @@ func Test_ScheduleToPendingScript(t *testing.T) {
 	t.Log(raw)
 }
 
-func Test_PendingToActiveScript(t *testing.T) {
+func Test_ReadyToActiveScript(t *testing.T) {
 	reportConsumer(t)
 
 	var keys = []string{
