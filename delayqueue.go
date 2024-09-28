@@ -313,7 +313,7 @@ func (q *DelayQueue) StartConsume(handler Handler) error {
 	q.consuming = true
 	q.close = make(chan struct{}, 1)
 
-	// 上报消息者
+	// 上报消费者
 	value, err := q.client.ZAddNX(context.Background(), internal.ConsumerKey(q.name), redis.Z{Member: q.uuid, Score: float64(time.Now().UnixMilli() + 30*1000)}).Result()
 	if err != nil {
 		return err
