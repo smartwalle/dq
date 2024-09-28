@@ -16,13 +16,12 @@ end
 -- 获取消费者的有效时间
 local consumerTimeout = redis.call('ZSCORE', KEYS[3], ARGV[1])
 if (consumerTimeout ~= nil and consumerTimeout ~= '') then
-    local timeout = tonumber(consumerTimeout)
     -- 获取消息 uuid
     local uuid = redis.call('HGET', mKey, 'uuid')
     -- 设置消费者id
     redis.call('HSET', mKey, 'c', ARGV[1])
     -- 添加到[处理中队列]
-    redis.call('ZADD', KEYS[2], timeout, mKey)
+    redis.call('ZADD', KEYS[2], consumerTimeout, mKey)
     return uuid
 end
 return ''
