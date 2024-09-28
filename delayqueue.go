@@ -100,7 +100,7 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 	}
 
 	var keys = []string{
-		internal.ScheduleKey(q.name),
+		internal.PendingKey(q.name),
 		internal.MessageKey(q.name, m.id),
 	}
 	var args = []interface{}{
@@ -124,7 +124,7 @@ func (q *DelayQueue) Remove(ctx context.Context, id string) error {
 	}
 
 	var keys = []string{
-		internal.ScheduleKey(q.name),
+		internal.PendingKey(q.name),
 		internal.MessageKey(q.name, id),
 	}
 	var args = []interface{}{
@@ -136,31 +136,31 @@ func (q *DelayQueue) Remove(ctx context.Context, id string) error {
 	return nil
 }
 
-func (q *DelayQueue) scheduleToPending(ctx context.Context) error {
+func (q *DelayQueue) pendingToReady(ctx context.Context) error {
 	var keys = []string{
-		internal.ScheduleKey(q.name),
 		internal.PendingKey(q.name),
+		internal.ReadyKey(q.name),
 		internal.MessageKeyPrefix(q.name),
 	}
 	var args = []interface{}{
 		q.fetchLimit,
 	}
-	if _, err := internal.ScheduleToPendingScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
+	if _, err := internal.PendingToReadyScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
 		return err
 	}
 	return nil
 }
 
-func (q *DelayQueue) pendingToActiveScript(ctx context.Context) (string, error) {
+func (q *DelayQueue) readyToActiveScript(ctx context.Context) (string, error) {
 	var keys = []string{
-		internal.PendingKey(q.name),
+		internal.ReadyKey(q.name),
 		internal.ActiveKey(q.name),
 		internal.ConsumerKey(q.name),
 	}
 	var args = []interface{}{
 		q.uuid,
 	}
-	raw, err := internal.PendingToActiveScript.Run(ctx, q.client, keys, args).Result()
+	raw, err := internal.ReadyToActiveScript.Run(ctx, q.client, keys, args).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return "", err
 	}
@@ -258,7 +258,7 @@ func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Ha
 }
 
 func (q *DelayQueue) consume(ctx context.Context, handler Handler) (err error) {
-	if err = q.scheduleToPending(ctx); err != nil {
+	if err = q.pendingToReady(ctx); err != nil {
 		return err
 	}
 
@@ -266,7 +266,7 @@ func (q *DelayQueue) consume(ctx context.Context, handler Handler) (err error) {
 
 	// 消费消息
 	for {
-		uuid, err = q.pendingToActiveScript(ctx)
+		uuid, err = q.readyToActiveScript(ctx)
 		if err != nil {
 			return err
 		}

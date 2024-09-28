@@ -1,4 +1,4 @@
- -- KEYS[1] - 延迟队列
+ -- KEYS[1] - 待消费队列
  -- KEYS[2] - 消息结构
  -- ARGV[1] - 消息 id (id)
  -- ARGV[2] - 消息 uuid (uuid)
@@ -8,7 +8,7 @@
  -- ARGV[6] - 剩余重试次数 (rc)
  -- 投递时间 (dt)
 
--- 添加到[延迟队列]
+-- 添加到[待消费队列]
 redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
 -- 获取当前时间
 local now = redis.call('TIME')

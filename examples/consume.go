@@ -31,6 +31,8 @@ func main() {
 		return
 	}
 
+	fmt.Println("消费者准备就绪")
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	select {

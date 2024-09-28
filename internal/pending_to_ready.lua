@@ -1,5 +1,5 @@
--- KEYS[1] - 延迟队列
--- KEYS[2] - 待处理队列
+-- KEYS[1] - 待消费队列
+-- KEYS[2] - 就绪队列
 -- KEYS[3] - MessageKeyPrefix
 -- ARGV[1] - 单次处理数量
 

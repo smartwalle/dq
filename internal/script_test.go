@@ -33,8 +33,8 @@ func TestMain(m *testing.M) {
 
 func Test_QueueKey(t *testing.T) {
 	t.Log(internal.QueueKey(queue))
-	t.Log(internal.ScheduleKey(queue))
 	t.Log(internal.PendingKey(queue))
+	t.Log(internal.ReadyKey(queue))
 	t.Log(internal.ActiveKey(queue))
 	t.Log(internal.RetryKey(queue))
 	t.Log(internal.MessageKey(queue, "11"))
@@ -45,7 +45,7 @@ func Test_ScheduleScript(t *testing.T) {
 	var id = "t1"
 
 	var keys = []string{
-		internal.ScheduleKey(queue),
+		internal.PendingKey(queue),
 		internal.MessageKey(queue, id),
 	}
 	var args = []interface{}{
@@ -67,7 +67,7 @@ func Test_RemoveScript(t *testing.T) {
 	var id = "t1"
 
 	var keys = []string{
-		internal.ScheduleKey(queue),
+		internal.PendingKey(queue),
 		internal.MessageKey(queue, id),
 	}
 	var args = []interface{}{
@@ -91,14 +91,14 @@ func Test_ScheduleToPendingScript(t *testing.T) {
 	reportConsumer(t)
 
 	var keys = []string{
-		internal.ScheduleKey(queue),
 		internal.PendingKey(queue),
+		internal.ReadyKey(queue),
 		internal.MessageKeyPrefix(queue),
 	}
 	var args = []interface{}{
 		10,
 	}
-	raw, err := internal.ScheduleToPendingScript.Run(context.Background(), redisClient, keys, args...).Result()
+	raw, err := internal.PendingToReadyScript.Run(context.Background(), redisClient, keys, args...).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}
@@ -109,14 +109,14 @@ func Test_PendingToActiveScript(t *testing.T) {
 	reportConsumer(t)
 
 	var keys = []string{
-		internal.PendingKey(queue),
+		internal.ReadyKey(queue),
 		internal.ActiveKey(queue),
 		internal.ConsumerKey(queue),
 	}
 	var args = []interface{}{
 		consumer,
 	}
-	raw, err := internal.PendingToActiveScript.Run(context.Background(), redisClient, keys, args).Result()
+	raw, err := internal.ReadyToActiveScript.Run(context.Background(), redisClient, keys, args).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		t.Fatal(err)
 	}

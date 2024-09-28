@@ -14,8 +14,8 @@ import (
 // rc -- 剩余重试次数
 // c -- 当前消费者id
 
-// 延迟队列(sorted set) - member: 消息id，score: 消费时间
-// 待处理队列(list) - element: 消息 uuid
+// 待消费队列(sorted set) - member: 消息id，score: 消费时间
+// 就绪队列(list) - element: 消息 uuid
 // 处理中队列(sorted set) - member: 消息id, score: 确认处理成功超时时间
 // 待重试队列(list) - element: 消息 uuid
 
@@ -31,17 +31,17 @@ var removeScript string
 // RemoveScript 删除消息
 var RemoveScript = redis.NewScript(removeScript)
 
-//go:embed schedule_to_pending.lua
-var scheduleToPendingScript string
+//go:embed pending_to_ready.lua
+var pendingToReadyScript string
 
-// ScheduleToPendingScript 将消息从[延迟队列]转移到[待处理队列]
-var ScheduleToPendingScript = redis.NewScript(scheduleToPendingScript)
+// PendingToReadyScript 将消息从[待消费队列]转移到[就绪队列]
+var PendingToReadyScript = redis.NewScript(pendingToReadyScript)
 
-//go:embed pending_to_active.lua
-var pendingToActiveScript string
+//go:embed ready_to_active.lua
+var readyToActiveScript string
 
-// PendingToActiveScript 将消息从[待处理队列]转移到[处理中队列]
-var PendingToActiveScript = redis.NewScript(pendingToActiveScript)
+// ReadyToActiveScript 将消息从[就绪队列]转移到[处理中队列]
+var ReadyToActiveScript = redis.NewScript(readyToActiveScript)
 
 //go:embed active_to_retry.lua
 var activeToRetryScript string
