@@ -2,7 +2,7 @@
 -- KEYS[2] - 待重试队列
 -- KEYS[3] - 消费者队列
 
-local doRetry = function(mKey, now)
+local toRetry = function(mKey, now)
     -- 判断消息结构是否存在
     local found = redis.call('EXISTS', mKey)
     if (found == 0) then
@@ -53,7 +53,7 @@ if (#mKeys > 0) then
     for _, mKey in ipairs(mKeys) do
         if (mKey ~= nil and mKey ~= '') then
             -- 重试处理逻辑
-            doRetry(mKey, milliseconds)
+            toRetry(mKey, milliseconds)
         end
     end
 end
