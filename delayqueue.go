@@ -236,6 +236,13 @@ func (q *DelayQueue) clearConsumer(ctx context.Context) error {
 }
 
 func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Handler) error {
+	defer func() {
+		var r = recover()
+		if r != nil {
+			q.nack(ctx, uuid)
+		}
+		// TODO 待完善
+	}()
 	if uuid == "" {
 		return nil
 	}
