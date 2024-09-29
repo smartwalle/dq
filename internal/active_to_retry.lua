@@ -11,7 +11,7 @@ local toRetry = function(mKey, now)
     end
 
     -- 获取消费者id
-    local consumer = redis.call('HGET', mKey, 'c')
+    local consumer = redis.call('HGET', mKey, 'cid')
     if (consumer ~= nil and consumer ~= '') then
         -- 获取消费者的有效时间
         local consumerTimeout = redis.call('ZSCORE', KEYS[3], consumer)
@@ -32,7 +32,7 @@ local toRetry = function(mKey, now)
         -- 更新剩余重试次数
         redis.call('HINCRBY', mKey, 'rc', -1)
         -- 清除消费者id
-        redis.call('HSET', mKey, 'c', '')
+        redis.call('HSET', mKey, 'cid', '')
         -- 添加到[待重试队列]中
         local timeout = now+ARGV[1] * 1000
         redis.call('ZADD', KEYS[2], timeout, mKey)

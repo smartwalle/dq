@@ -16,7 +16,7 @@ local toActive= function(mKey)
         -- 获取消息 uuid
         local uuid = redis.call('HGET', mKey, 'uuid')
         -- 设置消费者id
-        redis.call('HSET', mKey, 'c', ARGV[1])
+        redis.call('HSET', mKey, 'cid', ARGV[1])
         -- 添加到[处理中队列]
         redis.call('ZADD', KEYS[2], consumerTimeout, mKey)
         -- 从[待重试队列]中删除消息

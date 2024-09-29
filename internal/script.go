@@ -8,11 +8,12 @@ import (
 // 消息结构(hash)
 // id -- 消息业务id
 // uuid -- 消息唯一id
+// dt -- 消费时间（投递时间）
 // qn -- 队列名称
 // bd -- 消息内容
-// ct -- 消息创建时间
 // rc -- 剩余重试次数
-// c -- 当前消费者id
+// ct -- 消息创建时间
+// cid -- 当前消费者id
 
 // 待消费队列(sorted set) - member: MessageKey(id)，score: 消费时间
 // 就绪队列(list) - element: MessageKey(uuid)

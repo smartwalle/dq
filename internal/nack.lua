@@ -17,7 +17,7 @@ if (found == 0) then
 end
 
 -- 清除消费者id
-redis.call('HSET', mKey, 'c', '')
+redis.call('HSET', mKey, 'cid', '')
 
 -- 获取消息 uuid
 local uuid = redis.call('HGET', mKey, 'uuid')
