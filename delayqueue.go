@@ -119,7 +119,7 @@ func (q *DelayQueue) Enqueue(ctx context.Context, id string, opts ...MessageOpti
 		m.uuid,
 		m.deliverAt,
 		m.queue,
-		m.payload,
+		m.body,
 		m.retry,
 	}
 	if _, err := internal.ScheduleScript.Run(ctx, q.client, keys, args).Result(); err != nil && !errors.Is(err, redis.Nil) {
@@ -264,7 +264,7 @@ func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Ha
 		return nil
 	}
 
-	var data, err = q.client.HMGet(ctx, internal.MessageKey(q.name, uuid), "id", "uuid", "qn", "pl").Result()
+	var data, err = q.client.HMGet(ctx, internal.MessageKey(q.name, uuid), "id", "uuid", "qn", "bd").Result()
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func (q *DelayQueue) consumeMessage(ctx context.Context, uuid string, handler Ha
 	m.id, _ = data[0].(string)
 	m.uuid, _ = data[1].(string)
 	m.queue, _ = data[2].(string)
-	m.payload, _ = data[3].(string)
+	m.body, _ = data[3].(string)
 
 	if ok := handler(m); ok {
 		return q.ack(ctx, uuid)

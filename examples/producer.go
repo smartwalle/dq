@@ -21,7 +21,7 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 1000; i++ {
-		fmt.Println(i, queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1)))
+	for i := 0; i < 10; i++ {
+		fmt.Println(i, queue.Enqueue(context.Background(), fmt.Sprintf("%d", i), dq.WithDeliverAfter(0), dq.WithMaxRetry(1), dq.WithBody(fmt.Sprintf("body-%d", i))))
 	}
 }

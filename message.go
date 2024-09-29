@@ -14,7 +14,7 @@ type Message struct {
 	id        string // 消息 id - id
 	uuid      string // 消息 uuid - uuid
 	queue     string // 队列名称 - qn
-	payload   string // 消息内容 - pl
+	body      string // 消息内容 - bd
 	retry     int    // 剩余重试次数 - rc
 	deliverAt int64  // 投递时间
 }
@@ -31,8 +31,8 @@ func (m *Message) Queue() string {
 	return m.queue
 }
 
-func (m *Message) Payload() string {
-	return m.payload
+func (m *Message) Body() string {
+	return m.body
 }
 
 type MessageOption func(m *Message)
@@ -51,9 +51,9 @@ func WithDeliverAfter(seconds int64) MessageOption {
 	}
 }
 
-func WithPayload(payload string) MessageOption {
+func WithBody(body string) MessageOption {
 	return func(m *Message) {
-		m.payload = payload
+		m.body = body
 	}
 }
 
