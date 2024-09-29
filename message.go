@@ -16,7 +16,7 @@ type Message struct {
 	queue     string // 队列名称 - qn
 	body      string // 消息内容 - bd
 	retry     int    // 剩余重试次数 - rc
-	deliverAt int64  // 投递时间
+	deliverAt int64  // 消费时间（投递时间）
 }
 
 func (m *Message) ID() string {

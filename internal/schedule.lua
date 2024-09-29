@@ -2,7 +2,7 @@
  -- KEYS[2] - 消息结构
  -- ARGV[1] - 消息 id (id)
  -- ARGV[2] - 消息 uuid (uuid)
- -- ARGV[3] - 消费时间
+ -- ARGV[3] - 消费时间（投递时间）
  -- ARGV[4] - 队列名称 (qn)
  -- ARGV[5] - 消息内容 (bd)
  -- ARGV[6] - 剩余重试次数 (rc)
